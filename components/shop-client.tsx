@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { SlidersHorizontal, X, Check } from "lucide-react";
 import {
   products,
@@ -13,7 +13,7 @@ import {
   type SkinType,
 } from "@/lib/data";
 import { ProductCard } from "./product-card";
-import { cn } from "@/lib/utils";
+import { cn, formatPrice } from "@/lib/utils";
 
 const genders: { value: Gender | "all"; label: string }[] = [
   { value: "all", label: "Everyone" },
@@ -39,38 +39,97 @@ const sortOptions = [
   { value: "rating", label: "Top Rated" },
 ];
 
-const MAX = 60;
+const MIN = 300;
+const MAX = 1500;
 
+const VALID_GENDERS = new Set<string>(["women", "men", "unisex"]);
+const VALID_CATEGORIES = new Set<string>(categories.map((c) => c.slug));
+const VALID_CONCERNS = new Set<string>(concerns.map((c) => c.slug));
+const VALID_SKIN = new Set<string>(skinTypeOptions);
+
+/** The URL is the single source of truth for every filter, so views are
+ *  shareable, bookmarkable, and the back button behaves. */
 export function ShopClient() {
+  const router = useRouter();
   const params = useSearchParams();
-  const [gender, setGender] = useState<Gender | "all">(
-    (params.get("gender") as Gender) || "all",
-  );
-  const [cats, setCats] = useState<string[]>(
-    params.get("category") ? [params.get("category")!] : [],
-  );
-  const [skin, setSkin] = useState<SkinType[]>([]);
-  const [conc, setConc] = useState<Concern[]>(
-    params.get("concern") ? [params.get("concern") as Concern] : [],
-  );
-  const [maxPrice, setMaxPrice] = useState(MAX);
-  const [sort, setSort] = useState(params.get("sort") || "featured");
   const [mobileFilters, setMobileFilters] = useState(false);
 
-  const toggle = <T,>(
-    list: T[],
-    setList: (v: T[]) => void,
-    value: T,
-  ) => {
-    setList(
-      list.includes(value)
-        ? list.filter((x) => x !== value)
-        : [...list, value],
-    );
+  const list = (key: string, valid: Set<string>) =>
+    (params.get(key) ?? "")
+      .split(",")
+      .filter(Boolean)
+      .filter((v) => valid.has(v));
+
+  const genderRaw = params.get("gender") ?? "all";
+  const gender: Gender | "all" = VALID_GENDERS.has(genderRaw)
+    ? (genderRaw as Gender)
+    : "all";
+  const cats = list("category", VALID_CATEGORIES);
+  const conc = list("concern", VALID_CONCERNS) as Concern[];
+  const skin = list("skin", VALID_SKIN) as SkinType[];
+  const maxParam = Number(params.get("max"));
+  const maxPrice =
+    Number.isFinite(maxParam) && maxParam >= MIN && maxParam <= MAX
+      ? maxParam
+      : MAX;
+  const sort = params.get("sort") || "featured";
+  const search = params.get("q") || "";
+
+  // router.replace commits asynchronously, so rapid successive filter clicks
+  // would otherwise each start from the same stale snapshot and clobber each
+  // other — track the latest written query string until the hook catches up
+  const pendingQs = useRef<string | null>(null);
+  const paramsKey = params.toString();
+  useEffect(() => {
+    pendingQs.current = null;
+  }, [paramsKey]);
+
+  const setParam = (key: string, value: string | null) => {
+    const next = new URLSearchParams(pendingQs.current ?? paramsKey);
+    if (value === null || value === "") next.delete(key);
+    else next.set(key, value);
+    const qs = next.toString();
+    pendingQs.current = qs;
+    router.replace(qs ? `/shop?${qs}` : "/shop", { scroll: false });
   };
 
+  const setGender = (g: Gender | "all") =>
+    setParam("gender", g === "all" ? null : g);
+  const setSort = (s: string) => setParam("sort", s === "featured" ? null : s);
+  const setMaxPrice = (n: number) =>
+    setParam("max", n >= MAX ? null : String(n));
+  const setSearch = (q: string) => setParam("q", q || null);
+  const toggleIn = (key: string, current: string[], value: string) => {
+    const next = current.includes(value)
+      ? current.filter((x) => x !== value)
+      : [...current, value];
+    setParam(key, next.join(",") || null);
+  };
+
+  const clearAll = () => router.replace("/shop", { scroll: false });
+
+  // local draft so the price slider stays smooth while dragging;
+  // the URL is committed when the user lets go
+  const [priceDraft, setPriceDraft] = useState<number | null>(null);
+  const priceShown = priceDraft ?? maxPrice;
+
+  // Escape closes the mobile filter sheet
+  useEffect(() => {
+    if (!mobileFilters) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileFilters(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileFilters]);
+
   const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
     let list = products.filter((p) => {
+      if (q) {
+        const haystack = `${p.name} ${p.tagline} ${p.category} ${p.keyIngredients.join(" ")} ${p.concerns.join(" ")}`.toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
       if (gender !== "all" && p.gender !== gender && p.gender !== "unisex")
         return false;
       if (cats.length && !cats.includes(p.category)) return false;
@@ -106,7 +165,7 @@ export function ShopClient() {
         break;
     }
     return list;
-  }, [gender, cats, skin, conc, maxPrice, sort]);
+  }, [gender, cats, skin, conc, maxPrice, sort, search]);
 
   const activeCount =
     (gender !== "all" ? 1 : 0) +
@@ -115,15 +174,9 @@ export function ShopClient() {
     conc.length +
     (maxPrice < MAX ? 1 : 0);
 
-  const clearAll = () => {
-    setGender("all");
-    setCats([]);
-    setSkin([]);
-    setConc([]);
-    setMaxPrice(MAX);
-  };
-
-  const Filters = () => (
+  /* rendered via {filtersPanel} (not as a component) so re-renders don't
+     remount the inputs mid-interaction */
+  const filtersPanel = (
     <div className="space-y-7">
       {/* gender */}
       <FilterGroup title="Shop for">
@@ -153,7 +206,7 @@ export function ShopClient() {
               key={c.slug}
               label={c.name}
               checked={cats.includes(c.slug)}
-              onClick={() => toggle(cats, setCats, c.slug)}
+              onClick={() => toggleIn("category", cats, c.slug)}
             />
           ))}
         </ul>
@@ -167,7 +220,7 @@ export function ShopClient() {
               key={c.slug}
               label={c.name}
               checked={conc.includes(c.slug)}
-              onClick={() => toggle(conc, setConc, c.slug)}
+              onClick={() => toggleIn("concern", conc, c.slug)}
             />
           ))}
         </ul>
@@ -181,7 +234,7 @@ export function ShopClient() {
               key={s}
               label={skinTypeLabels[s]}
               checked={skin.includes(s)}
-              onClick={() => toggle(skin, setSkin, s)}
+              onClick={() => toggleIn("skin", skin, s)}
             />
           ))}
         </ul>
@@ -191,13 +244,29 @@ export function ShopClient() {
       <FilterGroup title="Max Price">
         <input
           type="range"
-          min={15}
+          min={MIN}
           max={MAX}
-          value={maxPrice}
-          onChange={(e) => setMaxPrice(Number(e.target.value))}
+          step={50}
+          value={priceShown}
+          aria-label="Maximum price"
+          onChange={(e) => setPriceDraft(Number(e.target.value))}
+          onPointerUp={() => {
+            if (priceDraft !== null) {
+              setMaxPrice(priceDraft);
+              setPriceDraft(null);
+            }
+          }}
+          onKeyUp={() => {
+            if (priceDraft !== null) {
+              setMaxPrice(priceDraft);
+              setPriceDraft(null);
+            }
+          }}
           className="w-full accent-[var(--color-sage)]"
         />
-        <p className="mt-1 text-[13px] text-ink-soft">Up to ${maxPrice}</p>
+        <p className="mt-1 text-[13px] text-ink-soft">
+          Up to {formatPrice(priceShown)}
+        </p>
       </FilterGroup>
     </div>
   );
@@ -208,15 +277,35 @@ export function ShopClient() {
       <div className="border-b border-line bg-surface">
         <div className="container-page py-10 lg:py-14">
           <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-sage-deep">
-            The collection
+            {search ? "Search results" : "The collection"}
           </p>
-          <h1 className="mt-2 font-display text-4xl text-ink lg:text-5xl">
-            Shop all skincare
-          </h1>
-          <p className="mt-2 max-w-xl text-[15px] text-ink-soft">
-            {products.length} clean, effective formulas for every skin type — for
-            men and women alike.
-          </p>
+          {search ? (
+            <>
+              <h1 className="mt-2 font-display text-4xl text-ink lg:text-5xl">
+                “{search}”
+              </h1>
+              <p className="mt-2 max-w-xl text-[15px] text-ink-soft">
+                {filtered.length}{" "}
+                {filtered.length === 1 ? "result" : "results"} for your search.{" "}
+                <button
+                  onClick={() => setSearch("")}
+                  className="font-medium text-sage-deep underline underline-offset-2"
+                >
+                  Clear search
+                </button>
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="mt-2 font-display text-4xl text-ink lg:text-5xl">
+                Shop all skincare
+              </h1>
+              <p className="mt-2 max-w-xl text-[15px] text-ink-soft">
+                {products.length} clean, effective formulas for every skin type —
+                for men and women alike.
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -236,7 +325,7 @@ export function ShopClient() {
                   </button>
                 )}
               </div>
-              <Filters />
+              {filtersPanel}
             </div>
           </aside>
 
@@ -283,22 +372,24 @@ export function ShopClient() {
                   </Chip>
                 )}
                 {cats.map((c) => (
-                  <Chip key={c} onClear={() => toggle(cats, setCats, c)}>
+                  <Chip key={c} onClear={() => toggleIn("category", cats, c)}>
                     {categories.find((x) => x.slug === c)?.name}
                   </Chip>
                 ))}
                 {conc.map((c) => (
-                  <Chip key={c} onClear={() => toggle(conc, setConc, c)}>
+                  <Chip key={c} onClear={() => toggleIn("concern", conc, c)}>
                     {concerns.find((x) => x.slug === c)?.name}
                   </Chip>
                 ))}
                 {skin.map((s) => (
-                  <Chip key={s} onClear={() => toggle(skin, setSkin, s)}>
+                  <Chip key={s} onClear={() => toggleIn("skin", skin, s)}>
                     {skinTypeLabels[s]}
                   </Chip>
                 ))}
                 {maxPrice < MAX && (
-                  <Chip onClear={() => setMaxPrice(MAX)}>Under ${maxPrice}</Chip>
+                  <Chip onClear={() => setMaxPrice(MAX)}>
+                    Under {formatPrice(maxPrice)}
+                  </Chip>
                 )}
               </div>
             )}
@@ -354,7 +445,7 @@ export function ShopClient() {
               <X size={22} />
             </button>
           </div>
-          <Filters />
+          {filtersPanel}
           <div className="mt-7 flex gap-3">
             <button
               onClick={clearAll}

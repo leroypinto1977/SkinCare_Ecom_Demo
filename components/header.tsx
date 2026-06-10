@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   Menu,
@@ -24,11 +25,21 @@ const mainNav = [
 ];
 
 export function Header() {
+  const router = useRouter();
   const { count, open } = useCart();
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [megaOpen, setMegaOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const submitSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = query.trim();
+    setSearchOpen(false);
+    setQuery("");
+    router.push(q ? `/shop?q=${encodeURIComponent(q)}` : "/shop");
+  };
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -40,6 +51,18 @@ export function Header() {
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
   }, [mobileOpen]);
+
+  // Escape closes whichever overlay is open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setMobileOpen(false);
+      setSearchOpen(false);
+      setMegaOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <header
@@ -186,17 +209,28 @@ export function Header() {
       {/* search bar */}
       {searchOpen && (
         <div className="border-t border-line bg-surface">
-          <div className="container-page flex items-center gap-3 py-3">
-            <Search size={18} className="text-muted" />
+          <form
+            onSubmit={submitSearch}
+            className="container-page flex items-center gap-3 py-3"
+          >
+            <button type="submit" aria-label="Search">
+              <Search size={18} className="text-muted hover:text-ink" />
+            </button>
             <input
               autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search for cleansers, serums, SPF…"
               className="h-10 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
             />
-            <button onClick={() => setSearchOpen(false)} aria-label="Close search">
+            <button
+              type="button"
+              onClick={() => setSearchOpen(false)}
+              aria-label="Close search"
+            >
               <X size={18} className="text-muted hover:text-ink" />
             </button>
-          </div>
+          </form>
         </div>
       )}
 

@@ -15,7 +15,7 @@ import { Newsletter } from "@/components/newsletter";
 import { buttonVariants } from "@/components/ui/button";
 
 const bestsellers = products.filter((p) => p.bestseller).slice(0, 4);
-const spotlight = products.find((p) => p.slug === "the-ordinary-glow-serum")!;
+const spotlight = products.find((p) => p.slug === "glow-vitamin-c-serum")!;
 
 const values = [
   { icon: Leaf, title: "Clean & Vegan", text: "Free from parabens, sulfates & synthetic fragrance." },
@@ -296,10 +296,10 @@ export default function HomePage() {
             hrefLabel="Read more"
           />
           <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {journalPosts.map((post) => (
-              <Link key={post.slug} href="/journal" className="group">
+            {journalPosts.slice(0, 3).map((post) => (
+              <Link key={post.slug} href={`/journal/${post.slug}`} className="group">
                 <ProductImage
-                  src=""
+                  src={post.image}
                   alt={post.title}
                   from={post.from}
                   to={post.to}

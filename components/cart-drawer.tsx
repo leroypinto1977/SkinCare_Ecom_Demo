@@ -1,13 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { Minus, Plus, ShoppingBag, X } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { cn, formatPrice } from "@/lib/utils";
+import { FREE_SHIPPING_THRESHOLD, MAX_QTY } from "@/lib/data";
 import { ProductImage } from "./product-image";
 import { buttonVariants } from "./ui/button";
 
-const FREE_SHIP = 50;
+const FREE_SHIP = FREE_SHIPPING_THRESHOLD;
 
 export function CartDrawer() {
   const { isOpen, close, lines, subtotal, count, setQty, removeItem, keyOf } =
@@ -15,6 +17,21 @@ export function CartDrawer() {
 
   const remaining = Math.max(0, FREE_SHIP - subtotal);
   const progress = Math.min(100, (subtotal / FREE_SHIP) * 100);
+
+  // close on Escape + lock body scroll while open
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen, close]);
 
   return (
     <div
@@ -35,6 +52,9 @@ export function CartDrawer() {
 
       {/* panel */}
       <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Shopping bag"
         className={cn(
           "absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-cream shadow-2xl transition-transform duration-300",
           isOpen ? "translate-x-0" : "translate-x-full",
@@ -136,7 +156,8 @@ export function CartDrawer() {
                           <span className="w-6 text-center text-sm">{l.qty}</span>
                           <button
                             onClick={() => setQty(k, l.qty + 1)}
-                            className="grid h-8 w-8 place-items-center rounded-full hover:bg-ink/5"
+                            disabled={l.qty >= MAX_QTY}
+                            className="grid h-8 w-8 place-items-center rounded-full hover:bg-ink/5 disabled:opacity-40"
                             aria-label="Increase"
                           >
                             <Plus size={14} />

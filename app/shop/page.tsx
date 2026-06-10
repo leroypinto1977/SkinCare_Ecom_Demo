@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { ShopClient } from "@/components/shop-client";
 
 export const metadata = {
-  title: "Shop All · Aurelle",
+  title: "Shop All",
   description: "Browse all Aurelle skincare — cleansers, serums, moisturizers, SPF and more.",
 };
 

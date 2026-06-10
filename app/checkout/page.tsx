@@ -1,22 +1,101 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Lock, ChevronLeft, CreditCard } from "lucide-react";
+import { Lock, ChevronLeft, CreditCard, Tag } from "lucide-react";
 import { useCart } from "@/lib/cart";
+import { placeOrder as persistOrder } from "@/lib/orders";
 import { formatPrice } from "@/lib/utils";
+import {
+  FREE_SHIPPING_THRESHOLD,
+  STANDARD_SHIPPING,
+  EXPRESS_SHIPPING,
+  GST_RATE,
+  shippingFor,
+} from "@/lib/data";
 import { ProductImage } from "@/components/product-image";
+
+type FieldName =
+  | "email"
+  | "firstName"
+  | "lastName"
+  | "address"
+  | "city"
+  | "pin"
+  | "state"
+  | "phone"
+  | "card"
+  | "expiry"
+  | "cvc";
+
+type FormState = Record<FieldName, string>;
+type Errors = Partial<Record<FieldName, string>>;
+
+const initialForm: FormState = {
+  email: "",
+  firstName: "",
+  lastName: "",
+  address: "",
+  city: "",
+  pin: "",
+  state: "",
+  phone: "",
+  card: "",
+  expiry: "",
+  cvc: "",
+};
+
+function validate(form: FormState): Errors {
+  const errors: Errors = {};
+  const digits = (s: string) => s.replace(/\D/g, "");
+
+  if (!form.email.trim()) errors.email = "Enter your email address";
+  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()))
+    errors.email = "That email doesn't look right";
+
+  if (!form.firstName.trim()) errors.firstName = "Required";
+  if (!form.lastName.trim()) errors.lastName = "Required";
+  if (!form.address.trim()) errors.address = "Enter your street address";
+  if (!form.city.trim()) errors.city = "Required";
+
+  if (!form.pin.trim()) errors.pin = "Required";
+  else if (!/^\d{6}$/.test(digits(form.pin)))
+    errors.pin = "PIN code is 6 digits";
+
+  if (!form.state.trim()) errors.state = "Required";
+
+  if (!form.phone.trim()) errors.phone = "Required";
+  else if (digits(form.phone).length < 10)
+    errors.phone = "Enter a 10-digit mobile number";
+
+  if (!form.card.trim()) errors.card = "Enter your card number";
+  else if (digits(form.card).length !== 16)
+    errors.card = "Card number is 16 digits";
+
+  if (!form.expiry.trim()) errors.expiry = "Required";
+  else if (!/^(0[1-9]|1[0-2])\s*\/\s*\d{2}$/.test(form.expiry.trim()))
+    errors.expiry = "Use MM / YY";
+
+  if (!form.cvc.trim()) errors.cvc = "Required";
+  else if (!/^\d{3,4}$/.test(digits(form.cvc))) errors.cvc = "3–4 digits";
+
+  return errors;
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { lines, subtotal, count, clear } = useCart();
+  const { lines, subtotal, count, discount, promo, clear } = useCart();
   const [placing, setPlacing] = useState(false);
   const [ship, setShip] = useState<"standard" | "express">("standard");
+  const [form, setForm] = useState<FormState>(initialForm);
+  const [errors, setErrors] = useState<Errors>({});
+  const formRef = useRef<HTMLFormElement>(null);
 
-  const shippingCost = ship === "express" ? 12 : subtotal >= 50 ? 0 : 5;
-  const tax = +(subtotal * 0.08).toFixed(2);
-  const total = subtotal + shippingCost + tax;
+  const discounted = subtotal - discount;
+  const shippingCost = shippingFor(discounted, ship);
+  const tax = Math.round(discounted * GST_RATE);
+  const total = discounted + shippingCost + tax;
 
   if (lines.length === 0 && !placing) {
     return (
@@ -33,9 +112,29 @@ export default function CheckoutPage() {
     );
   }
 
+  const setField = (name: FieldName) => (value: string) => {
+    setForm((f) => ({ ...f, [name]: value }));
+    // clear the field's error as soon as the user starts fixing it
+    setErrors((e) => (e[name] ? { ...e, [name]: undefined } : e));
+  };
+
   const placeOrder = (e: React.FormEvent) => {
     e.preventDefault();
+    const found = validate(form);
+    setErrors(found);
+    const firstInvalid = (Object.keys(found) as FieldName[]).find(
+      (k) => found[k],
+    );
+    if (firstInvalid) {
+      const el = formRef.current?.querySelector<HTMLInputElement>(
+        `[name="${firstInvalid}"]`,
+      );
+      el?.focus();
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
     setPlacing(true);
+    persistOrder(lines, total);
     clear();
     router.push("/order-confirmation");
   };
@@ -50,7 +149,9 @@ export default function CheckoutPage() {
       </Link>
 
       <form
+        ref={formRef}
         onSubmit={placeOrder}
+        noValidate
         className="mt-6 grid gap-10 lg:grid-cols-[1fr_400px]"
       >
         {/* form */}
@@ -58,7 +159,16 @@ export default function CheckoutPage() {
           <h1 className="font-display text-3xl">Checkout</h1>
 
           <Section step="1" title="Contact">
-            <Field label="Email address" type="email" placeholder="you@example.com" />
+            <Field
+              label="Email address"
+              name="email"
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              value={form.email}
+              onChange={setField("email")}
+              error={errors.email}
+            />
             <label className="mt-2 flex items-center gap-2 text-sm text-ink-soft">
               <input type="checkbox" className="accent-[var(--color-sage)]" />
               Email me with news and offers
@@ -67,17 +177,75 @@ export default function CheckoutPage() {
 
           <Section step="2" title="Shipping address">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="First name" placeholder="Jordan" />
-              <Field label="Last name" placeholder="Avery" />
+              <Field
+                label="First name"
+                name="firstName"
+                placeholder="Aarav"
+                autoComplete="given-name"
+                value={form.firstName}
+                onChange={setField("firstName")}
+                error={errors.firstName}
+              />
+              <Field
+                label="Last name"
+                name="lastName"
+                placeholder="Sharma"
+                autoComplete="family-name"
+                value={form.lastName}
+                onChange={setField("lastName")}
+                error={errors.lastName}
+              />
             </div>
-            <Field label="Address" placeholder="123 Maple Street" />
+            <Field
+              label="Address"
+              name="address"
+              placeholder="12, MG Road"
+              autoComplete="street-address"
+              value={form.address}
+              onChange={setField("address")}
+              error={errors.address}
+            />
             <div className="grid grid-cols-2 gap-3">
-              <Field label="City" placeholder="Portland" />
-              <Field label="Postal code" placeholder="97201" />
+              <Field
+                label="City"
+                name="city"
+                placeholder="Bengaluru"
+                autoComplete="address-level2"
+                value={form.city}
+                onChange={setField("city")}
+                error={errors.city}
+              />
+              <Field
+                label="PIN code"
+                name="pin"
+                placeholder="560001"
+                inputMode="numeric"
+                autoComplete="postal-code"
+                value={form.pin}
+                onChange={setField("pin")}
+                error={errors.pin}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="State" placeholder="Oregon" />
-              <Field label="Phone" type="tel" placeholder="(555) 010-2026" />
+              <Field
+                label="State"
+                name="state"
+                placeholder="Karnataka"
+                autoComplete="address-level1"
+                value={form.state}
+                onChange={setField("state")}
+                error={errors.state}
+              />
+              <Field
+                label="Phone"
+                name="phone"
+                type="tel"
+                placeholder="+91 98765 43210"
+                autoComplete="tel"
+                value={form.phone}
+                onChange={setField("phone")}
+                error={errors.phone}
+              />
             </div>
           </Section>
 
@@ -88,14 +256,18 @@ export default function CheckoutPage() {
                 onSelect={() => setShip("standard")}
                 title="Standard"
                 sub="3–5 business days"
-                price={subtotal >= 50 ? "Free" : "$5.00"}
+                price={
+                  discounted >= FREE_SHIPPING_THRESHOLD
+                    ? "Free"
+                    : formatPrice(STANDARD_SHIPPING)
+                }
               />
               <DeliveryOption
                 selected={ship === "express"}
                 onSelect={() => setShip("express")}
                 title="Express"
                 sub="1–2 business days"
-                price="$12.00"
+                price={formatPrice(EXPRESS_SHIPPING)}
               />
             </div>
           </Section>
@@ -106,10 +278,37 @@ export default function CheckoutPage() {
                 <CreditCard size={16} /> Credit card
               </div>
               <div className="mt-3 space-y-3">
-                <Field label="Card number" placeholder="4242 4242 4242 4242" />
+                <Field
+                  label="Card number"
+                  name="card"
+                  placeholder="4242 4242 4242 4242"
+                  inputMode="numeric"
+                  autoComplete="cc-number"
+                  value={form.card}
+                  onChange={setField("card")}
+                  error={errors.card}
+                />
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Expiry" placeholder="MM / YY" />
-                  <Field label="CVC" placeholder="123" />
+                  <Field
+                    label="Expiry"
+                    name="expiry"
+                    placeholder="MM / YY"
+                    inputMode="numeric"
+                    autoComplete="cc-exp"
+                    value={form.expiry}
+                    onChange={setField("expiry")}
+                    error={errors.expiry}
+                  />
+                  <Field
+                    label="CVC"
+                    name="cvc"
+                    placeholder="123"
+                    inputMode="numeric"
+                    autoComplete="cc-csc"
+                    value={form.cvc}
+                    onChange={setField("cvc")}
+                    error={errors.cvc}
+                  />
                 </div>
               </div>
               <p className="mt-3 flex items-center gap-1.5 text-[12px] text-muted">
@@ -118,12 +317,21 @@ export default function CheckoutPage() {
             </div>
           </Section>
 
-          <button
-            type="submit"
-            className="flex h-13 w-full items-center justify-center gap-2 rounded-full bg-ink text-[15px] font-medium text-cream transition hover:bg-ink-soft"
-          >
-            <Lock size={16} /> Pay {formatPrice(total)}
-          </button>
+          <div>
+            {Object.values(errors).some(Boolean) && (
+              <p className="mb-3 rounded-xl bg-clay-soft px-4 py-3 text-sm text-clay-deep" role="alert">
+                Please fix the highlighted fields to place your order.
+              </p>
+            )}
+            <button
+              type="submit"
+              disabled={placing}
+              className="flex h-13 w-full items-center justify-center gap-2 rounded-full bg-ink text-[15px] font-medium text-cream transition hover:bg-ink-soft disabled:opacity-60"
+            >
+              <Lock size={16} />
+              {placing ? "Placing order…" : `Pay ${formatPrice(total)}`}
+            </button>
+          </div>
         </div>
 
         {/* summary */}
@@ -164,12 +372,20 @@ export default function CheckoutPage() {
                 <dt className="text-ink-soft">Subtotal</dt>
                 <dd>{formatPrice(subtotal)}</dd>
               </div>
+              {promo && (
+                <div className="flex justify-between text-sage-deep">
+                  <dt className="flex items-center gap-1.5">
+                    <Tag size={14} /> {promo.code} (−{promo.percent}%)
+                  </dt>
+                  <dd>−{formatPrice(discount)}</dd>
+                </div>
+              )}
               <div className="flex justify-between">
                 <dt className="text-ink-soft">Shipping</dt>
                 <dd>{shippingCost === 0 ? "Free" : formatPrice(shippingCost)}</dd>
               </div>
               <div className="flex justify-between">
-                <dt className="text-ink-soft">Tax</dt>
+                <dt className="text-ink-soft">GST (18%)</dt>
                 <dd>{formatPrice(tax)}</dd>
               </div>
               <div className="mt-2 flex justify-between border-t border-line pt-3">
@@ -208,13 +424,26 @@ function Section({
 
 function Field({
   label,
+  name,
   type = "text",
   placeholder,
+  value,
+  onChange,
+  error,
+  inputMode,
+  autoComplete,
 }: {
   label: string;
+  name: string;
   type?: string;
   placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  inputMode?: "numeric" | "text" | "tel" | "email";
+  autoComplete?: string;
 }) {
+  const errorId = `${name}-error`;
   return (
     <label className="block">
       <span className="mb-1 block text-[13px] font-medium text-ink-soft">
@@ -222,9 +451,25 @@ function Field({
       </span>
       <input
         type={type}
+        name={name}
         placeholder={placeholder}
-        className="h-11 w-full rounded-xl border border-line bg-paper px-4 text-sm outline-none transition focus:border-sage focus:ring-2 focus:ring-sage/20"
+        value={value}
+        inputMode={inputMode}
+        autoComplete={autoComplete}
+        aria-invalid={!!error}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(e) => onChange(e.target.value)}
+        className={`h-11 w-full rounded-xl border bg-paper px-4 text-sm outline-none transition focus:ring-2 ${
+          error
+            ? "border-clay-deep focus:border-clay-deep focus:ring-clay/25"
+            : "border-line focus:border-sage focus:ring-sage/20"
+        }`}
       />
+      {error && (
+        <span id={errorId} className="mt-1 block text-[12px] text-clay-deep">
+          {error}
+        </span>
+      )}
     </label>
   );
 }

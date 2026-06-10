@@ -2,7 +2,7 @@ import { Mail, MessageCircle, MapPin, Clock, Plus } from "lucide-react";
 import { Newsletter } from "@/components/newsletter";
 
 export const metadata = {
-  title: "Contact & Help · Aurelle",
+  title: "Contact & Help",
   description: "Get in touch with the Aurelle team, shipping info and FAQs.",
 };
 
@@ -21,7 +21,7 @@ const faqs = [
   },
   {
     q: "What is your shipping policy?",
-    a: "We offer free carbon-neutral standard shipping on orders over $50. Standard delivery takes 3–5 business days; express is 1–2 business days.",
+    a: "We offer free carbon-neutral standard shipping on orders over ₹1,499. Standard delivery takes 3–5 business days; express is 1–2 business days.",
   },
   {
     q: "What if I don't love my purchase?",

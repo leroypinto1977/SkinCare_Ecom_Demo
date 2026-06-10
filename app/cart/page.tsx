@@ -1,18 +1,41 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Minus, Plus, X, ShoppingBag, Tag } from "lucide-react";
+import { Minus, Plus, X, ShoppingBag, Tag, Check } from "lucide-react";
 import { useCart } from "@/lib/cart";
 import { formatPrice } from "@/lib/utils";
+import { GST_RATE, MAX_QTY, shippingFor } from "@/lib/data";
 import { ProductImage } from "@/components/product-image";
 import { buttonVariants } from "@/components/ui/button";
 
 export default function CartPage() {
-  const { lines, subtotal, count, setQty, removeItem, keyOf } = useCart();
+  const {
+    lines,
+    subtotal,
+    count,
+    discount,
+    promo,
+    applyPromo,
+    removePromo,
+    setQty,
+    removeItem,
+    keyOf,
+  } = useCart();
+  const [code, setCode] = useState("");
+  const [promoError, setPromoError] = useState(false);
 
-  const shipping = subtotal >= 50 || subtotal === 0 ? 0 : 5;
-  const tax = +(subtotal * 0.08).toFixed(2);
-  const total = subtotal + shipping + tax;
+  const discounted = subtotal - discount;
+  const shipping = shippingFor(discounted);
+  const tax = Math.round(discounted * GST_RATE);
+  const total = discounted + shipping + tax;
+
+  const submitPromo = () => {
+    if (!code.trim()) return;
+    const ok = applyPromo(code);
+    setPromoError(!ok);
+    if (ok) setCode("");
+  };
 
   if (lines.length === 0) {
     return (
@@ -35,7 +58,9 @@ export default function CartPage() {
   return (
     <div className="container-page py-10 lg:py-14">
       <h1 className="font-display text-4xl">Your Bag</h1>
-      <p className="mt-1 text-ink-soft">{count} items</p>
+      <p className="mt-1 text-ink-soft">
+        {count} {count === 1 ? "item" : "items"}
+      </p>
 
       <div className="mt-8 grid gap-10 lg:grid-cols-[1fr_380px]">
         {/* lines */}
@@ -83,7 +108,8 @@ export default function CartPage() {
                         <span className="w-7 text-center text-sm">{l.qty}</span>
                         <button
                           onClick={() => setQty(k, l.qty + 1)}
-                          className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink/5"
+                          disabled={l.qty >= MAX_QTY}
+                          className="grid h-9 w-9 place-items-center rounded-full hover:bg-ink/5 disabled:opacity-40"
                           aria-label="Increase"
                         >
                           <Plus size={14} />
@@ -115,24 +141,84 @@ export default function CartPage() {
             <h2 className="font-display text-xl">Order Summary</h2>
 
             {/* promo */}
-            <div className="mt-4 flex items-center gap-2 rounded-full border border-line bg-paper px-2 py-1.5">
-              <Tag size={16} className="ml-2 text-muted" />
-              <input
-                placeholder="Promo code"
-                className="h-8 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-muted"
-              />
-              <button className="rounded-full bg-ink px-4 py-1.5 text-[13px] font-medium text-cream">
-                Apply
-              </button>
-            </div>
+            {promo ? (
+              <div className="mt-4 flex items-center justify-between rounded-full bg-sage-soft px-4 py-2.5 text-sm text-sage-deep">
+                <span className="flex items-center gap-2 font-medium">
+                  <Check size={15} /> {promo.code} applied — {promo.percent}% off
+                </span>
+                <button
+                  onClick={removePromo}
+                  aria-label="Remove promo code"
+                  className="hover:text-ink"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div
+                  className={`mt-4 flex items-center gap-2 rounded-full border bg-paper px-2 py-1.5 ${
+                    promoError ? "border-clay-deep" : "border-line"
+                  }`}
+                >
+                  <Tag size={16} className="ml-2 text-muted" />
+                  <input
+                    placeholder="Promo code"
+                    value={code}
+                    onChange={(e) => {
+                      setCode(e.target.value);
+                      setPromoError(false);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        submitPromo();
+                      }
+                    }}
+                    aria-label="Promo code"
+                    aria-invalid={promoError}
+                    className="h-8 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-muted"
+                  />
+                  <button
+                    onClick={submitPromo}
+                    className="rounded-full bg-ink px-4 py-1.5 text-[13px] font-medium text-cream"
+                  >
+                    Apply
+                  </button>
+                </div>
+                {promoError && (
+                  <p className="mt-2 px-2 text-[12px] text-clay-deep" role="alert">
+                    That code isn&apos;t valid. Try{" "}
+                    <button
+                      className="font-semibold underline"
+                      onClick={() => {
+                        setCode("GLOW10");
+                        setPromoError(false);
+                      }}
+                    >
+                      GLOW10
+                    </button>{" "}
+                    for 10% off your first order.
+                  </p>
+                )}
+              </>
+            )}
 
             <dl className="mt-5 space-y-2.5 text-sm">
               <Row label="Subtotal" value={formatPrice(subtotal)} />
+              {promo && (
+                <div className="flex items-center justify-between text-sage-deep">
+                  <dt>
+                    {promo.code} (−{promo.percent}%)
+                  </dt>
+                  <dd className="font-medium">−{formatPrice(discount)}</dd>
+                </div>
+              )}
               <Row
                 label="Shipping"
                 value={shipping === 0 ? "Free" : formatPrice(shipping)}
               />
-              <Row label="Estimated tax" value={formatPrice(tax)} />
+              <Row label="GST (18%)" value={formatPrice(tax)} />
               <div className="my-3 border-t border-line" />
               <div className="flex items-center justify-between">
                 <dt className="font-display text-lg">Total</dt>

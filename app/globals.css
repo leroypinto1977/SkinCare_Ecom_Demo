@@ -32,8 +32,10 @@
 }
 
 @layer base {
-  html {
-    scroll-behavior: smooth;
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
   }
   body {
     background-color: var(--color-cream);
@@ -73,6 +75,20 @@
   }
   .animate-fade-up {
     animation: fadeUp 0.6s ease both;
+  }
+  .marquee {
+    animation: marquee 30s linear infinite;
+  }
+  .marquee:hover {
+    animation-play-state: paused;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .marquee {
+      animation: none;
+    }
+    .animate-fade-up {
+      animation: none;
+    }
   }
 }
 

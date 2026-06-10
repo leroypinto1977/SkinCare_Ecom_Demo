@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
 import { CartProvider } from "@/lib/cart";
+import { WishlistProvider } from "@/lib/wishlist";
 import { AnnouncementBar } from "@/components/announcement-bar";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { CartDrawer } from "@/components/cart-drawer";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TITLE, SITE_URL } from "@/lib/site";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -21,9 +23,34 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Aurelle · Clean Skincare for Everyone",
-  description:
-    "Aurelle — clean, effective, dermatologist-tested skincare for men and women. Cleansers, serums, moisturizers, SPF and more.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_TITLE,
+    template: `%s · ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: [
+    "skincare",
+    "clean beauty",
+    "cleanser",
+    "serum",
+    "moisturizer",
+    "sunscreen",
+  ],
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: "/",
+    locale: "en_IN",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function RootLayout({
@@ -38,11 +65,13 @@ export default function RootLayout({
     >
       <body className="flex min-h-full flex-col bg-cream">
         <CartProvider>
-          <AnnouncementBar />
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
-          <CartDrawer />
+          <WishlistProvider>
+            <AnnouncementBar />
+            <Header />
+            <main className="flex-1">{children}</main>
+            <Footer />
+            <CartDrawer />
+          </WishlistProvider>
         </CartProvider>
       </body>
     </html>

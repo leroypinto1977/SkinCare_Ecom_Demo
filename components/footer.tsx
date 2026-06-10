@@ -91,14 +91,25 @@ export function Footer() {
         <div className="container-page flex flex-col items-center justify-between gap-4 py-6 text-sm text-muted sm:flex-row">
           <p>© 2026 Aurelle Skincare. Demo store — all content is fictional.</p>
           <div className="flex items-center gap-4">
-            {[Camera, AtSign, Send, MessageCircle].map((Icon, i) => (
+            {[
+              { icon: Camera, label: "Instagram", href: "https://instagram.com" },
+              { icon: AtSign, label: "Threads", href: "https://threads.net" },
+              { icon: Send, label: "Telegram", href: "https://telegram.org" },
+              {
+                icon: MessageCircle,
+                label: "WhatsApp",
+                href: "https://whatsapp.com",
+              },
+            ].map((s) => (
               <a
-                key={i}
-                href="#"
-                aria-label="Social"
+                key={s.label}
+                href={s.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Aurelle on ${s.label}`}
                 className="text-ink-soft transition hover:text-sage-deep"
               >
-                <Icon size={18} />
+                <s.icon size={18} />
               </a>
             ))}
           </div>

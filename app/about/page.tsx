@@ -5,7 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { products } from "@/lib/data";
 
 export const metadata = {
-  title: "Our Story · Aurelle",
+  title: "Our Story",
   description: "Why Aurelle exists — clean, effective skincare for every skin.",
 };
 

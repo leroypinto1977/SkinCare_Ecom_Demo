@@ -2,11 +2,40 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Mail, Lock, User, ArrowRight } from "lucide-react";
+import { setUser } from "@/lib/session";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const isSignup = mode === "signup";
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Enter a valid email address");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password needs at least 6 characters");
+      return;
+    }
+    if (isSignup && !name.trim()) {
+      setError("Tell us your name");
+      return;
+    }
+    const fallbackName = email.split("@")[0].replace(/[._-]+/g, " ");
+    setUser({
+      name: isSignup && name.trim() ? name.trim() : capitalize(fallbackName),
+      email: email.trim(),
+    });
+    router.push("/account");
+  };
 
   return (
     <div className="container-page grid place-items-center py-16 lg:py-24">
@@ -40,15 +69,43 @@ export default function LoginPage() {
           ))}
         </div>
 
-        <form
-          onSubmit={(e) => e.preventDefault()}
-          className="mt-6 space-y-3"
-        >
+        <form onSubmit={submit} className="mt-6 space-y-3">
           {isSignup && (
-            <IconField icon={User} placeholder="Full name" />
+            <IconField
+              icon={User}
+              placeholder="Full name"
+              value={name}
+              onChange={(v) => {
+                setName(v);
+                setError("");
+              }}
+            />
           )}
-          <IconField icon={Mail} type="email" placeholder="Email address" />
-          <IconField icon={Lock} type="password" placeholder="Password" />
+          <IconField
+            icon={Mail}
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={(v) => {
+              setEmail(v);
+              setError("");
+            }}
+          />
+          <IconField
+            icon={Lock}
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(v) => {
+              setPassword(v);
+              setError("");
+            }}
+          />
+          {error && (
+            <p className="px-1 text-[13px] text-clay-deep" role="alert">
+              {error}
+            </p>
+          )}
 
           {!isSignup && (
             <div className="flex items-center justify-between text-[13px]">
@@ -101,10 +158,14 @@ function IconField({
   icon: Icon,
   type = "text",
   placeholder,
+  value,
+  onChange,
 }: {
   icon: React.ComponentType<{ size?: number; className?: string }>;
   type?: string;
   placeholder?: string;
+  value: string;
+  onChange: (v: string) => void;
 }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border border-line bg-paper px-3 transition focus-within:border-sage focus-within:ring-2 focus-within:ring-sage/20">
@@ -112,8 +173,15 @@ function IconField({
       <input
         type={type}
         placeholder={placeholder}
+        aria-label={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         className="h-12 flex-1 bg-transparent text-sm outline-none placeholder:text-muted"
       />
     </div>
   );
+}
+
+function capitalize(s: string) {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }

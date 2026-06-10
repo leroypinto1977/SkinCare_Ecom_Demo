@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronRight, Plus } from "lucide-react";
@@ -15,6 +16,27 @@ import { Stars } from "@/components/ui/stars";
 
 export function generateStaticParams() {
   return products.map((p) => ({ slug: p.slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const product = getProduct(slug);
+  if (!product) return {};
+
+  return {
+    title: product.name,
+    description: `${product.tagline} ${product.description}`,
+    openGraph: {
+      title: product.name,
+      description: product.tagline,
+      url: `/product/${product.slug}`,
+      images: [{ url: product.image, alt: product.name }],
+    },
+  };
 }
 
 export default async function ProductPage({
@@ -50,7 +72,7 @@ export default async function ProductPage({
 
       {/* main */}
       <section className="container-page grid gap-10 py-8 lg:grid-cols-2 lg:gap-14 lg:py-10">
-        {/* gallery */}
+        {/* gallery — single honest image; no placeholder thumbnails */}
         <div className="lg:sticky lg:top-28 lg:self-start">
           <ProductImage
             src={product.image}
@@ -60,20 +82,6 @@ export default async function ProductPage({
             label={product.name.split(" ")[0]}
             className="aspect-[4/5] w-full"
           />
-          <div className="mt-3 grid grid-cols-4 gap-3">
-            {[product.from, product.to, product.from, product.to].map((_, i) => (
-              <ProductImage
-                key={i}
-                src={i === 0 ? product.image : ""}
-                alt=""
-                from={product.from}
-                to={product.to}
-                label={product.name.split(" ")[0]}
-                className="aspect-square w-full cursor-pointer ring-1 ring-line"
-                rounded="rounded-xl"
-              />
-            ))}
-          </div>
         </div>
 
         {/* details */}
@@ -105,7 +113,7 @@ export default async function ProductPage({
             </Accordion>
             <Accordion title="Shipping & Returns">
               <p className="text-sm leading-relaxed text-ink-soft">
-                Free carbon-neutral shipping on orders over $50. Most orders arrive
+                Free carbon-neutral shipping on orders over ₹1,499. Most orders arrive
                 in 3–5 business days. Not in love? Return within 30 days for a full
                 refund — even if it&apos;s opened.
               </p>

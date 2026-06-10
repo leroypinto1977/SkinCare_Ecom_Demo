@@ -2,17 +2,18 @@
 
 import Link from "next/link";
 import { Heart, Plus } from "lucide-react";
-import { useState } from "react";
 import type { Product } from "@/lib/data";
 import { formatPrice } from "@/lib/utils";
 import { useCart } from "@/lib/cart";
+import { useWishlist } from "@/lib/wishlist";
 import { ProductImage } from "./product-image";
 import { Badge } from "./ui/badge";
 import { Stars } from "./ui/stars";
 
 export function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCart();
-  const [wished, setWished] = useState(false);
+  const { has, toggle } = useWishlist();
+  const wished = has(product.slug);
 
   return (
     <div className="group relative flex flex-col">
@@ -40,8 +41,9 @@ export function ProductCard({ product }: { product: Product }) {
 
         {/* wishlist */}
         <button
-          aria-label="Add to wishlist"
-          onClick={() => setWished((w) => !w)}
+          aria-label={wished ? "Remove from wishlist" : "Add to wishlist"}
+          aria-pressed={wished}
+          onClick={() => toggle(product.slug)}
           className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-white/85 text-ink shadow-sm backdrop-blur transition hover:bg-white"
         >
           <Heart
